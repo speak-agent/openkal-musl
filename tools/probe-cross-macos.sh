@@ -96,7 +96,8 @@ cd "$here"
 # SECOND statement of what mcpp.toml already states, and a second statement is
 # a thing that falls behind the first. It fell behind on the release that added
 # the tenth entry, and it is this job that said so.
-skip='__libc_start_main|__init_tls|__set_thread_area|__unmapself|clone|posix_spawn|posix_spawnp|mmap|syscall_ret|getcwd|fcntl|dl_iterate_phdr|okm_phdr|cache'
+# okm_dl and okm_dl_reloc load ELF objects, and musl's __tls_get_addr is replaced by the port's.
+skip='__libc_start_main|__init_tls|__set_thread_area|__unmapself|clone|posix_spawn|posix_spawnp|mmap|syscall_ret|getcwd|fcntl|dl_iterate_phdr|okm_phdr|cache|okm_dl|okm_dl_reloc|__tls_get_addr'
 units=0
 for f in musl/src/*/*.c musl/src/malloc/mallocng/*.c port/src/*.c port/src/*.S; do
     base=$(basename "$f"); base=${base%.*}

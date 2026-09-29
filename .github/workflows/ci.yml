@@ -1083,9 +1083,9 @@ jobs:
       - name: The implementation for that system
         run: |
           branch='${{ github.head_ref || github.ref_name }}'
-          git clone --quiet https://github.com/mcpplibs/openkal-macos.git ../openkal-macos
+          git clone --quiet https://github.com/${{ github.repository_owner }}/openkal-macos.git ../openkal-macos
           git -C ../openkal-macos checkout --quiet "origin/$branch" 2>/dev/null || true
-          git clone --quiet https://github.com/mcpplibs/openkal.git ../openkal
+          git clone --quiet https://github.com/${{ github.repository_owner }}/openkal.git ../openkal
           git -C ../openkal checkout --quiet "origin/$branch" 2>/dev/null || true
 
       - name: Install LLVM
