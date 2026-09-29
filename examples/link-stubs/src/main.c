@@ -32,9 +32,17 @@ int main(void) {
 	struct timespec ts;
 	check(clock_gettime(CLOCK_MONOTONIC, &ts) == 0, "clock_gettime");
 
-	/* A statically linked program cannot dlopen anything; musl reports
-	 * that rather than mishandling it, and this checks the report. */
-	check(dlopen(NULL, RTLD_NOW) == NULL, "dlopen declines on a static binary");
+	/* -ldl names this library. Where the format has a loader here (ELF,
+	 * port/src/okm_dl.c), dlopen(NULL) is the program itself, as POSIX says;
+	 * where it does not yet, it is declined with a reason. A file that is not
+	 * there is declined everywhere, with a reason. */
+#ifdef __ELF__
+	check(dlopen(NULL, RTLD_NOW) != NULL, "dlopen(NULL) is the program");
+#else
+	check(dlopen(NULL, RTLD_NOW) == NULL && dlerror() != NULL, "dlopen declines where this format has no loader yet");
+#endif
+	check(dlopen("no-such-object.so", RTLD_NOW) == NULL && dlerror() != NULL,
+	      "a file that is not there is declined, with a reason");
 
 	printf("-- failures: %d --\n", failures);
 	return failures ? 1 : 0;
