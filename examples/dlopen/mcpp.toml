@@ -1,0 +1,24 @@
+# A PROGRAM THAT LOADS AN OBJECT, AND THE OBJECT IT LOADS (plugin/).
+#
+# The program is linked position-independent and static, and exports its
+# names: `-static-pie' gives it the dynamic symbol table a loaded object's
+# references are resolved against, and openkal-linux relocates it when it
+# starts. `--export-dynamic' puts every name it defines in that table ---
+# the C library's and the C++ library's included, so the object's references
+# to them reach the program's one copy.
+[package]
+name    = "dlopen"
+version = "0.1.0"
+
+[dependencies]
+openkal-musl = { path = "../.." }
+# libc++, libc++abi and libunwind over this C library; its own requirement on
+# this package is met by the path above.
+openkal-llvm-runtime = "0.15.2"
+
+[targets.dlopen]
+kind = "bin"
+main = "src/main.cpp"
+
+[build]
+ldflags = ["-Wl,-pie", "-Wl,-z,pack-relative-relocs", "-Wl,--export-dynamic"]

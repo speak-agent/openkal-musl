@@ -325,7 +325,8 @@ jobs:
                       kal_datagram_open kal_datagram_recv_from \
                       kal_timeout_read kal_timeout_write kal_timeout_accept \
                       kal_timeout_wait_process \
-                      kal_space_start kal_process_channel; do
+                      kal_space_start kal_process_channel \
+                      kal_exec_alloc kal_exec_free kal_exec_granularity kal_exec_publish_part; do
             if grep -qE "^ *U $name\$" syms.txt; then
               echo "::error::$name is an undefined STRONG reference; an interface a backend may decline has been made mandatory"
               weakfail=1
@@ -792,6 +793,23 @@ jobs:
           bash tools/run-probe.sh examples/malloc-large malloc-large
           grep -q 'growth: 24 blocks up to 8390650 bytes' examples/malloc-large/run.log
           grep -q -- '-- failures: 0 --' examples/malloc-large/run.log
+
+      # A STATIC PROGRAM LOADS AN OBJECT, AND THE TWO SHARE ONE RUNTIME.
+      #
+      # port/src/okm_dl.c: the program is linked -static-pie and exports its
+      # names; the object's references bind to them first, so its own copy of
+      # this C library is never reached. Eleven checks: names, one heap,
+      # exceptions both ways, thread-local storage, constructors, dladdr.
+      # libc++ comes from openkal-llvm-runtime, which is built by LLVM.
+      - name: A static program loads an object and they share one runtime
+        if: runner.os == 'Linux' && startsWith(matrix.toolchain, 'llvm')
+        env:
+          MCPP_TARGET: ${{ matrix.target }}
+        run: |
+          ( cd examples/dlopen/plugin && mcpp build --toolchain '${{ matrix.toolchain }}' )
+          plugin="$(find "$PWD/examples/dlopen/plugin/target" -name libplugin.so -type f | head -1)"
+          bash tools/run-probe.sh examples/dlopen dlopen "$plugin"
+          grep -q -- '-- failures: 0 --' examples/dlopen/run.log
 
       - name: A program may use the names the internal overlay defines
         env:

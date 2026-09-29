@@ -1,7 +1,7 @@
 [package]
 namespace   = "mcpplibs"
 name        = "openkal-musl"
-version     = "0.19.2"
+version     = "0.19.3"
 description = "musl 1.2.5 redirected onto openkal: one C library, ported once, above every implementation of the specification rather than above one kernel."
 license     = "Apache-2.0"
 
@@ -146,7 +146,7 @@ lchown    = { form = "enosys", note = "as chown" }
 tcsetattr = { form = "accepted-no-effect", note = "openkal names three positions of the terminal mode word; a request that alters output post-processing, the line speed, the control characters or VMIN/VTIME is accepted and that part has no effect" }
 
 [dependencies]
-openkal = "0.14.0"
+openkal = { git = "https://github.com/speak-agent/openkal.git", tag = "0.15.0" }
 
 # An ordinary consumer of openkal declares the specification and leaves the
 # choice of implementation to whoever builds the program, which is what the
@@ -161,7 +161,7 @@ openkal = "0.14.0"
 #
 # The consequence for a program is that it names this package and nothing else.
 [target.'cfg(os = "linux")'.dependencies]
-openkal-linux = { version = "0.15.0", features = ["standalone"] }
+openkal-linux = { git = "https://github.com/speak-agent/openkal-linux.git", tag = "0.16.0", features = ["standalone"] }
 
 [target.'cfg(os = "macos")'.dependencies]
 # 0.12.0 is the first release of this implementation that declares which
@@ -171,7 +171,7 @@ openkal-linux = { version = "0.15.0", features = ["standalone"] }
 # is the shape of a check that silently does not run --- while the same
 # consumer was answered on Linux and Windows, whose implementations have
 # carried the array since openkal-linux 0.15.0 and openkal-windows 0.10.0.
-openkal-macos = { version = "0.12.0", features = ["standalone"] }
+openkal-macos = { git = "https://github.com/speak-agent/openkal-macos.git", tag = "0.13.0", features = ["standalone"] }
 
 # FIRST STEP TOWARD A BARE MACHINE, AND NOT THE WHOLE OF IT.
 #
@@ -182,6 +182,10 @@ openkal-macos = { version = "0.12.0", features = ["standalone"] }
 # runtime that receives control, and a C library configured for an environment
 # with no process to exit from. So this declares the implementation and stops.
 [target.'cfg(os = "none")'.dependencies]
+# NOT YET FOLLOWED BY THIS FORK. openkal-opensbi 0.8.0 names openkal 0.14.0 by
+# version and this package names openkal 0.15.0 by git tag; mcpp refuses that
+# pair between two dependencies, so a bare-metal build fails to resolve until an
+# opensbi release names the same specification. Nothing loads objects there.
 openkal-opensbi = { version = "0.8.0", features = ["standalone"] }
 
 # WHICH OPENKAL INTERFACES THE IMPLEMENTATION BENEATH IS EXPECTED TO PROVIDE.
@@ -205,9 +209,11 @@ openkal-opensbi = { version = "0.8.0", features = ["standalone"] }
 # with one turns it back on from its own build without editing this file.
 [target.'cfg(os = "none")'.build]
 defines = ["OKM_HAS_FS=0", "OKM_HAS_PROCESS=0", "OKM_HAS_TASK=0"]
+# No file to load an object from, and no memory a program may execute.
+sources = ["!port/src/okm_dl.c", "!port/src/okm_dl_reloc.c"]
 
 [target.'cfg(windows)'.dependencies]
-openkal-windows = { version = "0.10.1", features = ["standalone"] }
+openkal-windows = { git = "https://github.com/speak-agent/openkal-windows.git", tag = "0.11.0", features = ["standalone"] }
 
 # The feature macros musl's own build establishes.
 #
@@ -279,6 +285,10 @@ sources = [
   # Replaced by port/src/okm_phdr.c: musl answers this from the auxiliary
   # vector, which the replaced __libc_start_main does not read.
   "!musl/src/ldso/dl_iterate_phdr.c",
+  # Replaced by port/src/okm_tls_get_addr.c: a module okm_dl.c loads has its
+  # thread-local storage made per context there, and this port's thread
+  # descriptors carry no vector for musl's to read.
+  "!musl/src/thread/__tls_get_addr.c",
   # THE ONE SOURCE WHOSE vDSO DEPENDENCY SURVIVES AN ARCHITECTURE HEADER THAT
   # DOES NOT OPT IN.
   #
@@ -592,6 +602,9 @@ ldflags = ["-nostdlib", "-static", "-Wl,--no-dynamic-linker",
 # this format has no program headers.
 sources = [
   "!port/src/okm_phdr.c",
+  # The loader reads ELF, which this format is not (okm_dl.c).
+  "!port/src/okm_dl.c",
+  "!port/src/okm_dl_reloc.c",
   # One file this format needs that no other does — the loader here runs
   # constructors before the entry point, so the library has to be able to come
   # up from a constructor too. `port/src/*.c` is a package-wide glob, so the
@@ -737,6 +750,9 @@ defines = ["OKM_TARGET_WINDOWS=1"]
 # this format has no program headers.
 sources = [
   "!port/src/okm_phdr.c",
+  # The loader reads ELF, which this format is not (okm_dl.c).
+  "!port/src/okm_dl.c",
+  "!port/src/okm_dl_reloc.c",
   # AND ONE THIS FORMAT NEEDS THAT NO OTHER DOES.
   #
   # IN A SUBDIRECTORY, AND THAT IS THE POINT. `port/src/*.c` in the

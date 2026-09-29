@@ -405,6 +405,52 @@ the ones that caused it: measured, the sixty-fifth `posix_spawn` of a program
 that waited for none, and of one that polled each once with `WNOHANG` and did
 not come back.
 
+## Loading an object: `dlopen`
+
+musl loads shared objects in its dynamic linker, and a static program has none,
+so a static musl answers `dlopen` with "Dynamic loading not supported". Here a
+program loads them itself: `port/src/okm_dl.c` is a loader, written above openkal
+because openkal says that is where one belongs --- reading a format,
+relocating and binding names are the same everywhere, and what it needs from
+beneath is memory it may execute, **in parts** (`kal_exec_publish_part`,
+openkal 0.15), since an object's code and its data lie at fixed distances in one
+region.
+
+```toml
+# The program: position-independent and static, with its names exported.
+[build]
+ldflags = ["-Wl,-pie", "-Wl,-z,pack-relative-relocs", "-Wl,--export-dynamic"]
+```
+
+- **What a loaded object binds to.** The program's names first, then those of
+  objects loaded with `RTLD_GLOBAL`, then its own and those of what it needs ---
+  ELF's order. `-static-pie` gives the program the dynamic symbol table that is
+  searched (openkal-linux relocates such a program when it starts), and
+  `--export-dynamic` puts every name it defines there. An object built by this
+  toolchain carries a copy of this C library, and that copy is never reached:
+  every name it defines is found in the program first --- one heap, one set of
+  streams, one C++ runtime, so a string made in the object is freed in the
+  program and an exception thrown in one is caught in the other.
+- **What it covers.** ELF on x86_64 and aarch64 (riscv64's relocations are
+  written, and not yet run anywhere): relative, absolute,
+  GOT and PLT relocations, the packed form (`DT_RELR`); constructors and
+  destructors; `DT_NEEDED`, found through the object's `RUNPATH`/`RPATH`
+  (`$ORIGIN`) and `LD_LIBRARY_PATH`, with the C and C++ runtime's own names
+  already the program's; thread-local storage, made in each context the first
+  time it asks (`port/src/okm_tls_get_addr.c`, and TLS descriptors on aarch64);
+  `dlsym` with `RTLD_DEFAULT` and `RTLD_NEXT`, `dladdr`, `dlinfo`; and the
+  unwinder sees every loaded object through `dl_iterate_phdr`.
+- **What it does not.** An object is never unloaded: `dlclose` succeeds and
+  keeps it, as musl's own dynamic linker does. Initial-exec thread-local storage
+  in an object is refused. Under `RTLD_NOW` a name nothing defines fails the
+  load, naming it; under `RTLD_LAZY` a function is bound to one that ends the
+  program saying so --- which is how an object whose copy of this C library
+  names a compiler builtin it never calls still loads. Windows and macOS load
+  their own formats and are not done yet.
+
+`examples/dlopen` is the evidence: a program and the object it loads, eleven
+checks, run on x86_64 and on aarch64.
+
 ## Asking which operation was missing
 
 `ENOSYS` says that a facility is not here. It does not say which one, and until
