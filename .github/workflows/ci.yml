@@ -794,6 +794,20 @@ jobs:
           grep -q 'growth: 24 blocks up to 8390650 bytes' examples/malloc-large/run.log
           grep -q -- '-- failures: 0 --' examples/malloc-large/run.log
 
+      # A CONSTRUCTOR USES THE LIBRARY BEFORE THE PROGRAM STARTS.
+      #
+      # On macOS the loader runs every constructor before the entry point, and
+      # a program's own precede this library's on the link line: every unit
+      # test of a program linked with MC++'s libraries ended on a signal there
+      # before its first line. The allocator's first use and the per-context
+      # state now bring the library up (musl/PATCHES.md).
+      - name: A constructor uses the library before the program starts
+        env:
+          MCPP_TARGET: ${{ matrix.target }}
+        run: |
+          bash tools/run-probe.sh examples/early-constructor early-constructor
+          grep -q -- '-- failures: 0 --' examples/early-constructor/run.log
+
       # A STATIC PROGRAM LOADS AN OBJECT, AND THE TWO SHARE ONE RUNTIME.
       #
       # port/src/okm_dl.c: the program is linked -static-pie and exports its

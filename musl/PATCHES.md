@@ -125,6 +125,20 @@ The same widening as `syscall.h`, applied to the cancellable form of the same
 function. `__syscall_cp` carries a system call's result and was declared to
 carry it in a `long`.
 
+## `src/malloc/mallocng/glue.h`: the allocator's first use brings the library up
+
+`get_random_secret()`, which the allocator calls once, the first time it is
+used, reads `libc.auxv` --- which this port fills in `__okm_libc_init`, from
+the program's start. On macOS the loader runs every constructor before the
+entry point, and a constructor ahead of this library's own on the link line
+(port/src/mach/early_init.c) that allocates reached a null vector: every unit
+test of a program linked with MC++'s libraries, whose plugins register from
+constructors, ended on a signal before its first line. The patch calls
+`__okm_libc_init()` first, under `OKM_MUSL_INTERNAL` (this package's own
+compile only); it is guarded, so everywhere the library is already up it
+returns at once. `port/src/okm_context.c`'s `__okm_get_tp` does the same for
+per-context state. `examples/early-constructor` is the evidence.
+
 ## The sources this port replaces, and why each
 
 Thirteen, and the list in the manifest carries the same reasons. The thirteenth
