@@ -805,7 +805,7 @@ jobs:
         env:
           MCPP_TARGET: ${{ matrix.target }}
         run: |
-          bash tools/run-probe.sh examples/early-constructor early-constructor
+          bash tools/run-probe.sh examples/early-constructor early-constructor one two
           grep -q -- '-- failures: 0 --' examples/early-constructor/run.log
 
       # A STATIC PROGRAM LOADS AN OBJECT, AND THE TWO SHARE ONE RUNTIME.

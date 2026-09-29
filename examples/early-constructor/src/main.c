@@ -8,6 +8,12 @@
  * registry filled from constructors, a string built at namespace scope. Each
  * of the three brings the library up on first use; on the other formats the
  * library is up before any constructor runs and nothing changes.
+ *
+ * The library brought up that early still gives main the program's arguments
+ * and environment (run as `early-constructor one two`): they were once taken
+ * only when the entry point or the platform's own constructor had recorded
+ * them, and a program started early saw none -- a test program asked to act as
+ * its own child ran its tests instead, and spawned itself again.
  */
 #include <errno.h>
 #include <stdio.h>
@@ -37,7 +43,7 @@ static void check(int ok, const char* what)
 	if (!ok) failures++;
 }
 
-int main(void)
+int main(int argc, char** argv)
 {
 	check(early_block != 0 && early_block[(1 << 16) - 1] == 7, "a constructor allocated before the program started");
 	check(early_value == 123 && early_errno == 0, "and read errno");
@@ -46,6 +52,8 @@ int main(void)
 	char* later = malloc(64);
 	check(later != 0, "the allocator goes on after main starts");
 	free(later);
+	check(argc == 3 && strcmp(argv[1], "one") == 0 && strcmp(argv[2], "two") == 0, "main has the arguments the program was started with");
+	check(getenv("PATH") != 0, "and the environment");
 	printf("-- failures: %d --\n", failures);
 	return failures != 0;
 }
