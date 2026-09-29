@@ -100,8 +100,13 @@ void __init_tls(size_t* aux)
 
 extern char** __environ;
 
-static char*  g_argv_store[256];
-static char*  g_envp_store[512];
+/* THE VECTORS ARE AS LONG AS WHAT THE PROGRAM WAS GIVEN. They were 256 and 512
+ * entries, and the rest was dropped without a word: a program started with a
+ * thousand arguments (a linker's objects, a compile's module files) saw 255 of
+ * them. Until the environment is read they name nothing. */
+static char*  g_none[1];
+static char** g_argv_store = g_none;
+static char** g_envp_store = g_none;
 static int    g_argc;
 
 static char* dup_counted(const char* s, size_t n)
@@ -127,16 +132,20 @@ void __okm_init_env(void)
 	 * cheaper than a buffer that might be too small. */
 	const kal_uintptr argc = kal_env_arg_count();
 	g_argc = 0;
-	for (kal_uintptr i = 0; i < argc && g_argc < 255; i++) {
-		const kal_intptr len = kal_env_arg(i, 0, 0);
-		if (len < 0) break;
-		char* p = kal_alloc((kal_uintptr)len + 1, 1);
-		if (!p) break;
-		if (kal_env_arg(i, p, (kal_uintptr)len) != len) break;
-		p[len] = 0;
-		g_argv_store[g_argc++] = p;
+	char** args = kal_alloc((argc + 1) * sizeof(char*), _Alignof(char*));
+	if (args) {
+		for (kal_uintptr i = 0; i < argc; i++) {
+			const kal_intptr len = kal_env_arg(i, 0, 0);
+			if (len < 0) break;
+			char* p = kal_alloc((kal_uintptr)len + 1, 1);
+			if (!p) break;
+			if (kal_env_arg(i, p, (kal_uintptr)len) != len) break;
+			p[len] = 0;
+			args[g_argc++] = p;
+		}
+		args[g_argc] = 0;
+		g_argv_store = args;
 	}
-	g_argv_store[g_argc] = 0;
 
 	/* Enumeration answers a NAME, and the value is then looked up by it. Two
 	 * small operations rather than one that answers both: the one that answered
@@ -145,7 +154,8 @@ void __okm_init_env(void)
 	 * program runs, so the index holds across the two calls. */
 	int envc = 0;
 	const kal_uintptr n = kal_env_var_count();
-	for (kal_uintptr i = 0; i < n && envc < 511; i++) {
+	char** vars = kal_alloc((n + 1) * sizeof(char*), _Alignof(char*));
+	for (kal_uintptr i = 0; vars && i < n; i++) {
 		const kal_intptr nlen = kal_env_var_at(i, 0, 0);
 		if (nlen < 0) break;
 		char* name = kal_alloc((kal_uintptr)nlen + 1, 1);
@@ -162,9 +172,12 @@ void __okm_init_env(void)
 		if (have) kal_env_var(name, (kal_uintptr)nlen, p + nlen + 1, have);
 		p[nlen + 1 + have] = 0;
 		kal_free(name, (kal_uintptr)nlen + 1, 1);
-		g_envp_store[envc++] = p;
+		vars[envc++] = p;
 	}
-	g_envp_store[envc] = 0;
+	if (vars) {
+		vars[envc] = 0;
+		g_envp_store = vars;
+	}
 	__environ = g_envp_store;
 
 	__progname = __progname_full = g_argc ? g_argv_store[0] : (char*)"";
