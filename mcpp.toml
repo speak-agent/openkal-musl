@@ -1,7 +1,7 @@
 [package]
 namespace   = "mcpplibs"
 name        = "openkal-musl"
-version     = "0.19.5"
+version     = "0.19.6"
 description = "musl 1.2.5 redirected onto openkal: one C library, ported once, above every implementation of the specification rather than above one kernel."
 license     = "Apache-2.0"
 
@@ -171,7 +171,7 @@ openkal-linux = { git = "https://github.com/speak-agent/openkal-linux.git", tag 
 # is the shape of a check that silently does not run --- while the same
 # consumer was answered on Linux and Windows, whose implementations have
 # carried the array since openkal-linux 0.15.0 and openkal-windows 0.10.0.
-openkal-macos = { git = "https://github.com/speak-agent/openkal-macos.git", tag = "0.13.1", features = ["standalone"] }
+openkal-macos = { git = "https://github.com/speak-agent/openkal-macos.git", tag = "0.13.2", features = ["standalone"] }
 
 # FIRST STEP TOWARD A BARE MACHINE, AND NOT THE WHOLE OF IT.
 #
