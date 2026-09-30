@@ -824,6 +824,12 @@ jobs:
           plugin="$(find "$PWD/examples/dlopen/plugin/target" -name libplugin.so -type f | head -1)"
           bash tools/run-probe.sh examples/dlopen dlopen "$plugin"
           grep -q -- '-- failures: 0 --' examples/dlopen/run.log
+          # Optimised too: a -static-pie program relocates itself before main, and
+          # -O2 compiled that code differently (openkal-linux 0.16.2). One
+          # configuration under target/ at a time (tools/one-artifact.sh).
+          rm -rf examples/dlopen/target
+          MCPP_PROFILE=release bash tools/run-probe.sh examples/dlopen dlopen "$plugin"
+          grep -q -- '-- failures: 0 --' examples/dlopen/run.log
 
       - name: A program may use the names the internal overlay defines
         env:

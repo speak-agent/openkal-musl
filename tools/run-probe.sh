@@ -40,6 +40,10 @@ cd "$dir"
 
 extra=''
 [ -n "${MCPP_TARGET:-}" ] && extra="--target $MCPP_TARGET"
+# And the profile, where the row asks for one: an optimised build is a different
+# program (openkal-linux 0.16.2: -O2 turned the start code's test of its own
+# header into a read of an unrelocated word).
+[ -n "${MCPP_PROFILE:-}" ] && extra="$extra --profile $MCPP_PROFILE"
 # shellcheck disable=SC2086
 mcpp build $extra
 
