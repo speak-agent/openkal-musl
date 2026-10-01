@@ -781,6 +781,21 @@ jobs:
           bash tools/run-probe.sh examples/threads-detached threads-detached
           grep -q 'detached: 8 started, 8 ended' examples/threads-detached/run.log
 
+      # A STARTED THREAD HOLDS A DEEP RECURSION.
+      #
+      # A context's stack is openkal's (port/src/okm_thread.c), and each
+      # implementation's was smaller than what Clang asks for and recurses into:
+      # 256 KiB on Linux, the thread library's 512 KiB on macOS, where mcppls
+      # crashed in template instantiation. openkal-linux 0.16.3, openkal-macos
+      # 0.13.4 and openkal-windows 0.11.1 give a context 8 MiB.
+      - name: A started thread holds a deep recursion
+        env:
+          MCPP_TARGET: ${{ matrix.target }}
+        run: |
+          bash tools/run-probe.sh examples/threads-stack threads-stack
+          grep -q 'deep: 256 frames of 16 KiB on a started thread' examples/threads-stack/run.log
+          grep -q -- '-- failures: 0 --' examples/threads-stack/run.log
+
       # A LARGE ALLOCATION IS A MAPPING, AND A MAPPING IS WHOLE PAGES.
       #
       # musl's allocator uses a mapping up to the end of its last page; the port
