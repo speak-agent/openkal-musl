@@ -1,0 +1,13 @@
+[package]
+name    = "early-constructor"
+version = "0.1.0"
+
+[dependencies]
+openkal-musl = { path = "../.." }
+
+[targets.early-constructor]
+kind = "bin"
+main = "src/main.c"
+
+[build]
+cxx_runtime = "host-coupled"

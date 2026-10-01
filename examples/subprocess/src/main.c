@@ -105,6 +105,8 @@ static void check(int ok, const char* what)
 static int child_mode(int argc, char** argv)
 {
 	for (int i = 1; i < argc; i++) {
+		/* How many arguments arrived: all of a thousand (42), or not (1). */
+		if (strcmp(argv[i], "--child-argc") == 0) _exit(argc == 1000 ? 42 : 1);
 		if (strcmp(argv[i], "--child-echo") == 0 && i + 1 < argc) {
 			/* `write' AND NOT `printf'. What is being measured is which
 			 * stream descriptor 1 names in this program, and stdio would add a
@@ -295,6 +297,24 @@ int main(int argc, char** argv)
 		check(e == 0, "a program starts and inherits the streams of the caller");
 		if (e == 0) wait_for(pid);
 		printf("\n");
+	}
+
+	/* A THOUSAND ARGUMENTS, AS A LINKER IS STARTED WITH ONE PER OBJECT. The
+	 * vectors were static and bounded at 512, and a larger one was refused E2BIG
+	 * although no kernel limit was near (mcxx linking a program of seven hundred
+	 * objects). */
+	{
+		static char* av[1001];
+		av[0] = (char*)self;
+		av[1] = (char*)"--child-argc";
+		for (int i = 2; i < 1000; i++) av[i] = (char*)"x";
+		av[1000] = 0;
+		pid_t pid = -1;
+		const int e = posix_spawn(&pid, self, NULL, NULL, av, environ);
+		int status = 0;
+		const int waited = e == 0 && waitpid(pid, &status, 0) == pid;
+		check(e == 0 && waited && WIFEXITED(status) && WEXITSTATUS(status) == 42,
+		      "a program started with a thousand arguments receives them all");
 	}
 
 	/* --- a redirection the caller performed, three ways it can be expressed ---- */

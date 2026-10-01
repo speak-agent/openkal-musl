@@ -33,10 +33,17 @@
  * already exclude musl's own dl_iterate_phdr, and for the same reason: the
  * operation names a structure those formats do not have.
  */
+#include "okm_dl.h"
 #include <link.h>
 #include <stddef.h>
 
-extern const ElfW(Ehdr) __ehdr_start __attribute__((weak));
+/* The objects okm_dl.c has loaded, after the program. Defined here rather than
+ * there so that a program which never loads anything carries none of the
+ * loader for the unwinder's sake. */
+hidden struct okm_dso *__okm_dl_head;
+hidden unsigned long long __okm_dl_adds = 1;
+
+extern const ElfW(Ehdr) __ehdr_start __attribute__((__weak__));
 
 int dl_iterate_phdr(int (*callback)(struct dl_phdr_info *info, size_t size,
                                     void *data),
@@ -68,10 +75,25 @@ int dl_iterate_phdr(int (*callback)(struct dl_phdr_info *info, size_t size,
 	 * again, which cannot happen here: there is one object and it is the
 	 * program. A caller reads them to decide whether what it cached is still
 	 * valid, and the answer is that it always is. */
-	info.dlpi_adds  = 1;
+	info.dlpi_adds  = __atomic_load_n(&__okm_dl_adds, __ATOMIC_ACQUIRE);
 	info.dlpi_subs  = 0;
 	info.dlpi_tls_modid = 0;
 	info.dlpi_tls_data  = NULL;
 
-	return callback(&info, sizeof info, data);
+	int r = callback(&info, sizeof info, data);
+
+	/* Then every object loaded since, in the order it was loaded --- the
+	 * unwinder finds a loaded object's frame descriptions here, and an
+	 * exception thrown through its code needs them. Nothing is ever removed,
+	 * so the count of additions is the whole of what changes. */
+	for (struct okm_dso *d = __atomic_load_n(&__okm_dl_head, __ATOMIC_ACQUIRE); r == 0 && d;
+	     d = __atomic_load_n(&d->next, __ATOMIC_ACQUIRE)) {
+		info.dlpi_addr  = d->lm.l_addr;
+		info.dlpi_name  = d->lm.l_name;
+		info.dlpi_phdr  = d->phdr;
+		info.dlpi_phnum = d->phnum;
+		info.dlpi_tls_modid = d->tls_id;
+		r = callback(&info, sizeof info, data);
+	}
+	return r;
 }

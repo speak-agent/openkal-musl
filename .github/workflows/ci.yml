@@ -325,7 +325,8 @@ jobs:
                       kal_datagram_open kal_datagram_recv_from \
                       kal_timeout_read kal_timeout_write kal_timeout_accept \
                       kal_timeout_wait_process \
-                      kal_space_start kal_process_channel; do
+                      kal_space_start kal_process_channel \
+                      kal_exec_alloc kal_exec_free kal_exec_granularity kal_exec_publish_part; do
             if grep -qE "^ *U $name\$" syms.txt; then
               echo "::error::$name is an undefined STRONG reference; an interface a backend may decline has been made mandatory"
               weakfail=1
@@ -780,6 +781,21 @@ jobs:
           bash tools/run-probe.sh examples/threads-detached threads-detached
           grep -q 'detached: 8 started, 8 ended' examples/threads-detached/run.log
 
+      # A STARTED THREAD HOLDS A DEEP RECURSION.
+      #
+      # A context's stack is openkal's (port/src/okm_thread.c), and each
+      # implementation's was smaller than what Clang asks for and recurses into:
+      # 256 KiB on Linux, the thread library's 512 KiB on macOS, where mcppls
+      # crashed in template instantiation. openkal-linux 0.16.3, openkal-macos
+      # 0.13.4 and openkal-windows 0.11.1 give a context 8 MiB.
+      - name: A started thread holds a deep recursion
+        env:
+          MCPP_TARGET: ${{ matrix.target }}
+        run: |
+          bash tools/run-probe.sh examples/threads-stack threads-stack
+          grep -q 'deep: 256 frames of 16 KiB on a started thread' examples/threads-stack/run.log
+          grep -q -- '-- failures: 0 --' examples/threads-stack/run.log
+
       # A LARGE ALLOCATION IS A MAPPING, AND A MAPPING IS WHOLE PAGES.
       #
       # musl's allocator uses a mapping up to the end of its last page; the port
@@ -792,6 +808,43 @@ jobs:
           bash tools/run-probe.sh examples/malloc-large malloc-large
           grep -q 'growth: 24 blocks up to 8390650 bytes' examples/malloc-large/run.log
           grep -q -- '-- failures: 0 --' examples/malloc-large/run.log
+
+      # A CONSTRUCTOR USES THE LIBRARY BEFORE THE PROGRAM STARTS.
+      #
+      # On macOS the loader runs every constructor before the entry point, and
+      # a program's own precede this library's on the link line: every unit
+      # test of a program linked with MC++'s libraries ended on a signal there
+      # before its first line. The allocator's first use and the per-context
+      # state now bring the library up (musl/PATCHES.md).
+      - name: A constructor uses the library before the program starts
+        env:
+          MCPP_TARGET: ${{ matrix.target }}
+        run: |
+          bash tools/run-probe.sh examples/early-constructor early-constructor one two
+          grep -q -- '-- failures: 0 --' examples/early-constructor/run.log
+
+      # A STATIC PROGRAM LOADS AN OBJECT, AND THE TWO SHARE ONE RUNTIME.
+      #
+      # port/src/okm_dl.c: the program is linked -static-pie and exports its
+      # names; the object's references bind to them first, so its own copy of
+      # this C library is never reached. Eleven checks: names, one heap,
+      # exceptions both ways, thread-local storage, constructors, dladdr.
+      # libc++ comes from openkal-llvm-runtime, which is built by LLVM.
+      - name: A static program loads an object and they share one runtime
+        if: runner.os == 'Linux' && startsWith(matrix.toolchain, 'llvm')
+        env:
+          MCPP_TARGET: ${{ matrix.target }}
+        run: |
+          ( cd examples/dlopen/plugin && mcpp build --toolchain '${{ matrix.toolchain }}' )
+          plugin="$(find "$PWD/examples/dlopen/plugin/target" -name libplugin.so -type f | head -1)"
+          bash tools/run-probe.sh examples/dlopen dlopen "$plugin"
+          grep -q -- '-- failures: 0 --' examples/dlopen/run.log
+          # Optimised too: a -static-pie program relocates itself before main, and
+          # -O2 compiled that code differently (openkal-linux 0.16.2). One
+          # configuration under target/ at a time (tools/one-artifact.sh).
+          rm -rf examples/dlopen/target
+          MCPP_PROFILE=release bash tools/run-probe.sh examples/dlopen dlopen "$plugin"
+          grep -q -- '-- failures: 0 --' examples/dlopen/run.log
 
       - name: A program may use the names the internal overlay defines
         env:
@@ -1051,9 +1104,9 @@ jobs:
       - name: The implementation for that system
         run: |
           branch='${{ github.head_ref || github.ref_name }}'
-          git clone --quiet https://github.com/mcpplibs/openkal-macos.git ../openkal-macos
+          git clone --quiet https://github.com/${{ github.repository_owner }}/openkal-macos.git ../openkal-macos
           git -C ../openkal-macos checkout --quiet "origin/$branch" 2>/dev/null || true
-          git clone --quiet https://github.com/mcpplibs/openkal.git ../openkal
+          git clone --quiet https://github.com/${{ github.repository_owner }}/openkal.git ../openkal
           git -C ../openkal checkout --quiet "origin/$branch" 2>/dev/null || true
 
       - name: Install LLVM

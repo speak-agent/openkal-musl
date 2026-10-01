@@ -96,7 +96,8 @@ cd "$here"
 # SECOND statement of what mcpp.toml already states, and a second statement is
 # a thing that falls behind the first. It fell behind on the release that added
 # the tenth entry, and it is this job that said so.
-skip='__libc_start_main|__init_tls|__set_thread_area|__unmapself|clone|posix_spawn|posix_spawnp|mmap|syscall_ret|getcwd|fcntl|dl_iterate_phdr|okm_phdr|cache'
+# okm_dl and okm_dl_reloc load ELF objects, and musl's __tls_get_addr is replaced by the port's.
+skip='__libc_start_main|__init_tls|__set_thread_area|__unmapself|clone|posix_spawn|posix_spawnp|mmap|syscall_ret|getcwd|fcntl|dl_iterate_phdr|okm_phdr|cache|okm_dl|okm_dl_reloc|__tls_get_addr'
 units=0
 for f in musl/src/*/*.c musl/src/malloc/mallocng/*.c port/src/*.c port/src/*.S; do
     base=$(basename "$f"); base=${base%.*}
@@ -139,7 +140,7 @@ printf 'int main(void){return 0;}\n' > "$out/probe_main.c"
 set +e
 undef=$("$LD64" -arch "${triple%%-*}" -platform_version macos 14.0 14.0 \
         -o /dev/null "$out"/*.o -e _okm_start -dead_strip 2>&1 \
-        | sed -n 's/.*undefined symbol: //p' | sort -u \
+        | sed -n 's/.*undefined symbol: //p' | LC_ALL=C sort -u \
         | grep -vx 'dyld_stub_binder' || true)
 set -e
 
@@ -147,14 +148,16 @@ set -e
 # is not an answer to this question: no source names it, the linker emits the
 # reference for its own lazy binding, and whether it appears at all depends on
 # the linker's version. It belongs to the stub, which the link below exercises.
-expected=$'_clock_gettime_nsec_np\n_pthread_create_from_mach_thread'
+# openkal-macos 0.13.2: and the three vectors every program has, which a C library started by an
+# early constructor asks for before either of openkal-macos's entrances recorded them.
+expected=$'__NSGetArgc\n__NSGetArgv\n__NSGetEnviron\n_clock_gettime_nsec_np\n_pthread_create_from_mach_thread'
 echo "probe: names this system supplies:"
 printf '  %s\n' $undef
 
 fail=0
 [ "$indirect" -eq 0 ] || { echo "FAIL: $indirect indirect symbols; recorded 0" >&2; fail=1; }
 [ "$undef" = "$expected" ] || {
-    echo "FAIL: the set of names differs from the recorded two" >&2
+    echo "FAIL: the set of names differs from the recorded ones" >&2
     echo "  recorded:" >&2; printf '    %s\n' $expected >&2
     fail=1
 }

@@ -1,0 +1,15 @@
+# The object examples/dlopen loads: an ordinary shared library. Built by this
+# toolchain it carries a copy of the C library too, which is never reached ---
+# every name that copy defines is found in the program first (port/src/okm_dl.c).
+[package]
+name    = "plugin"
+version = "0.1.0"
+
+[dependencies]
+openkal-musl = { path = "../../.." }
+# libc++, libc++abi and libunwind over this C library; its own requirement on
+# this package is met by the path above.
+openkal-llvm-runtime = "0.15.2"
+
+[targets.plugin]
+kind = "shared"

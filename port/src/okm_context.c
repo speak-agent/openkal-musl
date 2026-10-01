@@ -111,6 +111,8 @@ static struct okm_slot* find(kal_uintptr me, int create)
  * rather than the absence. */
 static volatile int g_recorded;
 
+void __okm_libc_init(void);
+
 uintptr_t __okm_get_tp(void)
 {
 	struct okm_slot* s = find(key_of(OKM_CONTEXT_ID()), 0);
@@ -122,7 +124,20 @@ uintptr_t __okm_get_tp(void)
 			"here as it did when the context started\n";
 		kal_abort(m, sizeof m - 1);
 	}
-	return 0;
+	/* NOTHING RECORDED YET: THE LIBRARY IS NOT UP, AND SOMETHING ALREADY ASKS.
+	 *
+	 * On the format whose loader runs every constructor before the entry
+	 * point, a constructor that precedes this library's own on the link line
+	 * --- a program's, or a library's it was linked with --- reaches its
+	 * per-context state (errno, the locale) before mach/early_init.c has run.
+	 * Measured: every unit test of a program linked with MC++'s libraries,
+	 * whose plugins register from constructors, ended on a signal before its
+	 * first line on macOS. So the library comes up here, on first use, and the
+	 * question is asked again. __okm_libc_init is guarded: during the
+	 * library's own start this returns at once, and the answer is still zero. */
+	__okm_libc_init();
+	s = find(key_of(OKM_CONTEXT_ID()), 0);
+	return s ? s->tp : 0;
 }
 
 void __okm_set_tp(uintptr_t value)

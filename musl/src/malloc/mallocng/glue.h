@@ -41,8 +41,17 @@
 
 #define DISABLE_ALIGNED_ALLOC (__malloc_replaced && !__aligned_alloc_replaced)
 
+#ifdef OKM_MUSL_INTERNAL
+/* openkal-musl: the allocator's first use may precede the library's start
+ * (musl/PATCHES.md, "The allocator's first use brings the library up"). */
+void __okm_libc_init(void);
+#endif
+
 static inline uint64_t get_random_secret()
 {
+#ifdef OKM_MUSL_INTERNAL
+	__okm_libc_init();
+#endif
 	uint64_t secret = (uintptr_t)&secret * 1103515245;
 	for (size_t i=0; libc.auxv[i]; i+=2)
 		if (libc.auxv[i]==AT_RANDOM)

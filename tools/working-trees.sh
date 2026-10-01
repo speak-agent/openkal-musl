@@ -37,13 +37,18 @@ case "${target:-$(uname -s)}" in
 esac
 echo "building for ${target:-$(uname -s)}, so the implementation is $implementation"
 
+# The trees come from this repository's own owner --- a fork's siblings from the
+# fork's owner --- unless OPENKAL_OWNER names another.
+owner="${OPENKAL_OWNER:-$(git -C "$here" remote get-url origin 2>/dev/null \
+                          | sed -n 's#.*github\.com[:/]\([^/]*\)/.*#\1#p')}"
+owner="${owner:-mcpplibs}"
 fetch() {
     local repo="$1" at="$beside/$1"
     if [ -d "$at/.git" ]; then
         echo "$repo is already beside this package"
         return
     fi
-    git clone --quiet "https://github.com/mcpplibs/$repo.git" "$at"
+    git clone --quiet "https://github.com/$owner/$repo.git" "$at"
     if git -C "$at" rev-parse --verify --quiet "origin/$branch" > /dev/null; then
         git -C "$at" checkout --quiet "origin/$branch"
         echo "$repo is at $branch $(git -C "$at" rev-parse --short HEAD)"
@@ -97,7 +102,8 @@ in_step() {   # in_step <package> <tree>
     local pkg="$1" tree="$2"
     local want actual
     want="$(sed -n "s/^$pkg *= *\"\([0-9.]*\)\".*/\1/p;
-                    s/^$pkg *= *{.*version *= *\"\([0-9.]*\)\".*/\1/p" \
+                    s/^$pkg *= *{.*version *= *\"\([0-9.]*\)\".*/\1/p;
+                    s/^$pkg *= *{.*tag *= *\"\([0-9.]*\)\".*/\1/p" \
                  "$here/mcpp.toml" | head -1)"
     actual="$(sed -n 's/^version *= *"\([0-9.]*\)".*/\1/p' "$tree/mcpp.toml" | head -1)"
     if [ -z "$want" ] || [ -z "$actual" ]; then

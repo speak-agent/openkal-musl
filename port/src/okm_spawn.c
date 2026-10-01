@@ -388,12 +388,33 @@ int __okm_spawn_common(pid_t* restrict res, const char* restrict path,
 
 	const int argc = count(argv);
 	const int envc = count(envp);
-	if (argc >= OKM_SPAWN_MAX || envc >= OKM_SPAWN_MAX) return E2BIG;
 
-	static const char* a_ptr[OKM_SPAWN_MAX];
-	static kal_uintptr  a_len[OKM_SPAWN_MAX];
-	static const char* e_ptr[OKM_SPAWN_MAX];
-	static kal_uintptr  e_len[OKM_SPAWN_MAX];
+	/* THE VECTORS ARE STATIC UP TO A BOUND, AND ON THE HEAP BEYOND IT. Static,
+	 * under this file's lock, because a function a program with a small thread
+	 * stack reaches must not grow its frame by kilobytes; but POSIX sets no
+	 * bound on how many arguments a program is started with, and a linker is
+	 * started with one per object: a program of seven hundred objects was
+	 * refused E2BIG here (mcxx linking xlings), while the command was far below
+	 * any length a kernel limits. Beyond the bound the vectors are this call's,
+	 * released once the program is started. */
+	static const char* a_static[OKM_SPAWN_MAX];
+	static kal_uintptr  a_static_len[OKM_SPAWN_MAX];
+	static const char* e_static[OKM_SPAWN_MAX];
+	static kal_uintptr  e_static_len[OKM_SPAWN_MAX];
+	const char** a_ptr = a_static;
+	kal_uintptr* a_len = a_static_len;
+	const char** e_ptr = e_static;
+	kal_uintptr* e_len = e_static_len;
+	void* heap = 0;
+	if (argc >= OKM_SPAWN_MAX || envc >= OKM_SPAWN_MAX) {
+		const size_t n = (size_t)argc + (size_t)envc + 2;
+		heap = malloc(n * (sizeof(const char*) + sizeof(kal_uintptr)));
+		if (!heap) return ENOMEM;
+		a_ptr = (const char**)heap;
+		e_ptr = a_ptr + argc + 1;
+		a_len = (kal_uintptr*)(e_ptr + envc + 1);
+		e_len = a_len + argc + 1;
+	}
 
 	okm_lock();
 	for (int i = 0; i < argc; i++) { a_ptr[i] = argv[i]; a_len[i] = slen(argv[i]); }
@@ -545,6 +566,7 @@ int __okm_spawn_common(pid_t* restrict res, const char* restrict path,
 		for (int i = 0; i < opened_n; i++) okm_fs_close_file(opened[i]);
 		if (where_held) okm_fs_close_dir(where);
 		okm_unlock();
+		free(heap);
 		return refused;
 	}
 
@@ -569,6 +591,8 @@ int __okm_spawn_common(pid_t* restrict res, const char* restrict path,
 	int e = start_program(bound, want_unit, where_held ? where : okm_cwd_dir,
 	                      &at, a_ptr, a_len, argc,
 	                      e_ptr, e_len, envc, &streams, &child);
+	free(heap);   /* the vectors are read; the started program has its own */
+	heap = 0;
 
 	/* THE ONE ENVIRONMENT THAT SPELLS A PROGRAM WITH A SUFFIX IS ANSWERED
 	 * BEFORE THIS POINT AND NOT AFTER IT.
